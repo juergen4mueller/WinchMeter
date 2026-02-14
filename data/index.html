@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="UTF-8">
+    <link rel="stylesheet" type="text/css" href="style.css">
+    <script src="chart.min.js"></script>
+    <script src="chartjs-plugin-zoom.min.js"></script>
+
+    <!-- <script>
+        Chart.register(zoomPlugin);
+    </script> -->
+
+
+    <script src="nosleep.min.js"></script>
+</head>
+<body>
+    <div class="container">
+
+        <div class="buttonRow">
+            <button onclick="calibrate()" class="btn-gray">Calibrate</button>
+            <button onclick="tare()" class="btn-gray">Tara</button>
+        </div>
+
+        <h1>Winch Meter</h1>
+        <div id="weightDisplay">0.00 kg</div>
+        <canvas id="weightChart"></canvas>
+        <div class="buttonRow">
+            <button id="btnStart" class="btn-blue">Start</button>
+            <button id="btnStopp" class="btn-blue">Stopp</button>
+            <button onclick="exportCSV()" class="btn-gray">Export</button>
+        </div>
+    </div>
+    <script>
+        let wakeLock = null;
+        const history = []; // Speicher für CSV Export
+        const ctx = document.getElementById('weightChart').getContext('2d');
+        const chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Gewicht (kg)',
+                    data: [],
+                    borderColor: '#2097e7ff',
+                    borderWidth: 2,
+                    fill: false,
+                    tension: 0.3,
+                    pointRadius: 0
+                }]
+            },
+            options: {
+                animation: false,
+                scales: {
+                    y: { beginAtZero: true, grid: { color: '#656565ff' }, ticks: { color: '#fff' } },
+                    x: { display: false }
+                },
+                plugins: {
+                    legend: { display: false },
+
+                    zoom: {
+                        zoom: {
+                            wheel: { enabled: false },     // Zoomen mit Mausrad
+                            pinch: { enabled: false },     // Zoomen mit zwei Fingern (Touch)
+                            mode: 'x'                     // Nur horizontal zoomen
+                        },
+                        pan: {
+                            enabled: false,
+                            mode: 'x',                    // Horizontal scrollen
+                            modifierKey: 'shift'          // Optional: nur mit Shift gedrückt
+                        }
+                    }
+                }
+            }
+        });
+
+
+        const gateway = `ws://${window.location.hostname}/ws`;
+        let socket = new WebSocket(gateway);
+
+        socket.onmessage = function(event) {
+            const now = new Date();
+            const weight = parseFloat(event.data);
+            const timestamp = now.toLocaleTimeString();
+
+            // Daten für CSV speichern
+            history.push({ time: now.toISOString(), val: weight });
+
+            // Chart Update
+            chart.data.labels.push(timestamp);
+            chart.data.datasets[0].data.push(weight);
+
+            // Letzte 30 Sekunden behalten (bei 10Hz ca. 300 Datenpunkte)
+            // Wenn du exakt 30 Sek willst, ist ein Limit von ca. 300 bei 100ms Intervall korrekt
+            if (chart.data.labels.length > 200) {
+                chart.data.labels.shift();
+                chart.data.datasets[0].data.shift();
+            }
+            chart.update('none');
+            document.getElementById('weightDisplay').textContent = weight.toFixed(2) + " kg";
+        };
+
+        function tare() { socket.send("tare"); }
+        function calibrate() { 
+            const value = prompt("Bitte Kalibrierwert eingeben:"); 
+            if (value !== null) { 
+                console.log("Eingegebener Wert:", value); 
+                socket.send("calib "+value); 
+            } else { 
+                console.log("Abgebrochen"); 
+            } 
+        }
+
+        function exportCSV() {
+            let csvContent = "data:text/csv;charset=utf-8,Zeitstempel,Gewicht_kg\n";
+            history.forEach(row => {
+                csvContent += `${row.time},${row.val}\n`;
+            });
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);const d = new Date();
+            const timestamp =
+            d.getFullYear() +
+            String(d.getMonth()+1).padStart(2,"0") +
+            String(d.getDate()).padStart(2,"0") + "_" +
+            String(d.getHours()).padStart(2,"0")  +
+            String(d.getMinutes()).padStart(2,"0")  +
+            String(d.getSeconds()).padStart(2,"0");
+
+            link.setAttribute("download", `${timestamp}_waage_daten.csv`);
+
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        var noSleep = new NoSleep();
+        document.getElementById('btnStart').addEventListener('click', function() {
+            history.length = 0;
+            this.innerHTML = "running";
+            document.getElementById("btnStopp").innerHTML = "Stopp";
+            noSleep.enable();
+            socket.send("start"); 
+        });
+        document.getElementById('btnStopp').addEventListener('click', function() {
+            //this.innerHTML = "running";
+            document.getElementById("btnStart").innerHTML = "Start";
+            noSleep.disable();
+            socket.send("stopp"); 
+        });
+    </script>
+
+</body>
+</html>
