@@ -19,6 +19,7 @@
 
         <div class="buttonRow">
             <button onclick="calibrate()" class="btn-gray">Calibrate</button>
+            <h2 id="akkustand">3,87V 50%</h2>
             <button onclick="tare()" class="btn-gray">Tara</button>
         </div>
 
@@ -79,25 +80,33 @@
         let socket = new WebSocket(gateway);
 
         socket.onmessage = function(event) {
-            const now = new Date();
-            const weight = parseFloat(event.data);
-            const timestamp = now.toLocaleTimeString();
-
-            // Daten für CSV speichern
-            history.push({ time: now.toISOString(), val: weight });
-
-            // Chart Update
-            chart.data.labels.push(timestamp);
-            chart.data.datasets[0].data.push(weight);
-
-            // Letzte 30 Sekunden behalten (bei 10Hz ca. 300 Datenpunkte)
-            // Wenn du exakt 30 Sek willst, ist ein Limit von ca. 300 bei 100ms Intervall korrekt
-            if (chart.data.labels.length > 200) {
-                chart.data.labels.shift();
-                chart.data.datasets[0].data.shift();
+            msg = event.data;
+            if (msg.startsWith("B:")) {
+                const voltage = parseFloat(msg.substring(2));
+                document.getElementById("akkustand").innerHTML = voltage;
             }
-            chart.update('none');
-            document.getElementById('weightDisplay').textContent = weight.toFixed(2) + " kg";
+            else if (msg.startsWith("W:")) {
+                const scaleValue = parseFloat(msg.substring(2));
+                const now = new Date();
+                const weight = parseFloat(scaleValue);
+                const timestamp = now.toLocaleTimeString();
+
+                // Daten für CSV speichern
+                history.push({ time: now.toISOString(), val: weight });
+
+                // Chart Update
+                chart.data.labels.push(timestamp);
+                chart.data.datasets[0].data.push(weight);
+
+                // Letzte 30 Sekunden behalten (bei 10Hz ca. 300 Datenpunkte)
+                // Wenn du exakt 30 Sek willst, ist ein Limit von ca. 300 bei 100ms Intervall korrekt
+                if (chart.data.labels.length > 200) {
+                    chart.data.labels.shift();
+                    chart.data.datasets[0].data.shift();
+                }
+                chart.update('none');
+                document.getElementById('weightDisplay').textContent = weight.toFixed(2) + " kg";
+            }
         };
 
         function tare() { socket.send("tare"); }

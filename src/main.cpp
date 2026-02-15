@@ -11,6 +11,148 @@
 #include "LittleFS.h"
 #include <Preferences.h>
 
+#include <NimBLEDevice.h>
+
+bool WifiClientConnected = false;
+
+NimBLEAdvertising* pAdvertising;
+static NimBLECharacteristic* notifyChar;
+static NimBLECharacteristic* writeChar;
+
+class CmdCallback : public NimBLECharacteristicCallbacks {
+    void onWrite(NimBLECharacteristic* c) {
+        std::string val = c->getValue();
+        if (val.empty()) return;
+
+        uint8_t cmd = val[0];
+        Serial.printf("Received command: 0x%02X\n", cmd);
+
+        switch (cmd) {
+            case 0x02:
+                Serial.println("TARE command received");
+                // TODO: tare logic
+                break;
+
+            case 0x03:
+                Serial.println("UNIT CHANGE command received");
+                // TODO: unit change logic
+                break;
+
+            case 0x04:
+                Serial.println("HOLD command received");
+                // TODO: hold logic
+                break;
+
+            default:
+                Serial.printf("Unknown command: 0x%02X\n", cmd);
+        }
+    }
+};
+
+// A3B8C4F4-1298-D5A4-5191-0A0D7DEA7C0A: IF_B7
+// <0100> 0203 112A C019 1124 4301 0253 01F4 A144 30
+
+void init_bt_ad(void){
+
+    NimBLEDevice::init("IF_B7");
+
+    NimBLEServer* server = NimBLEDevice::createServer();
+    // NimBLEService* service = server->createService("0000ffe0-0000-1000-8000-00805f9b34fb");
+    
+    // notifyChar = service->createCharacteristic(
+    //     "0000ffe4-0000-1000-8000-00805f9b34fb",
+    //     NIMBLE_PROPERTY::NOTIFY
+    // );
+
+    // writeChar = service->createCharacteristic(
+    //     "0000ffe9-0000-1000-8000-00805f9b34fb",
+    //     NIMBLE_PROPERTY::WRITE
+    // );
+
+    // writeChar->setCallbacks(new CmdCallback());
+    //service->start();
+
+    // Advertising
+    pAdvertising = NimBLEDevice::getAdvertising();
+    pAdvertising->setMinInterval(200);
+    pAdvertising->setMaxInterval(300);
+
+    NimBLEAdvertisementData advData;
+    advData.setFlags(BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP);
+
+    advData.setName("IF_B7");
+    advData.addServiceUUID("A3B8C4F4-1298-D5A4-5191-0A0D7DEA7C0A");
+
+    std::string payload;
+    uint16_t raw = 0;  // Rohwert
+
+    //<0100> 0203 112A C019 1124 4301 0253 01F4 A144 30
+    payload.push_back(0x01);
+    payload.push_back(0x00);
+    payload.push_back(0x02);
+    payload.push_back(0x03);
+    payload.push_back(0x11);
+    payload.push_back(0x2A);
+    payload.push_back(0xC0);
+    payload.push_back(0x19);
+    payload.push_back(0x11);
+    payload.push_back(0x24);
+    payload.push_back(0x43);
+    payload.push_back(0x01);
+    payload.push_back(0x02);
+    payload.push_back(0x53);
+    payload.push_back(0x01);
+    payload.push_back(0xF4);
+    payload.push_back(0xA1);
+    payload.push_back(0x44);
+    payload.push_back(0x30);
+    advData.setManufacturerData(payload);
+
+    pAdvertising->setAdvertisementData(advData);
+    pAdvertising->start();
+
+
+    Serial.println("WH-C06 compatible BLE scale started");
+}
+
+uint32_t nextBtAdd =0;
+void bt_set_ad(float scaleValue){
+    uint32_t now = millis();
+    if((now > nextBtAdd)&&(!WifiClientConnected)){
+        nextBtAdd = now + 250;
+        Serial.printf("BT ADD %.2f\r\n", scaleValue);
+        NimBLEAdvertisementData advData;
+        std::string payload;
+
+        uint16_t raw = scaleValue * 100;  // Rohwert
+
+        payload.push_back(0x01);
+        payload.push_back(0x00);
+        payload.push_back(0x02);
+        payload.push_back(0x03);
+        payload.push_back(0x11);
+        payload.push_back(0x2A);
+        payload.push_back(0xC0);
+        payload.push_back(0x19);
+        payload.push_back(0x11);
+        payload.push_back(0x24);
+        payload.push_back(0x43);
+        payload.push_back(0x01);
+        payload.push_back((raw >>8)&0xFF);
+        payload.push_back(raw & 0xFF);
+        payload.push_back(0x01);
+        payload.push_back(0xF4);
+        payload.push_back(0xA1);
+        payload.push_back(0x44);
+        payload.push_back(0x30);
+        advData.setManufacturerData(payload);
+
+        // Werbung aktualisieren (kein Stop/Start nötig)
+        pAdvertising->setAdvertisementData(advData);
+    }
+}
+
+
 float calibValue = 1;
 float scaleValue = 1;
 bool scaleCalibrate=0;
@@ -122,8 +264,6 @@ void scaleTask(void *pvParameters) {
     scale.tare();
 
     float currentWeight;
-    
-    
     while (true) {
         // Prüfen, ob die Waage bereit ist (ohne das System zu blockieren)
         if (scale.is_ready()) {
@@ -143,6 +283,7 @@ void scaleTask(void *pvParameters) {
         }
         // WICHTIG: Dem Watchdog Zeit geben!
         vTaskDelay(pdMS_TO_TICKS(50)); 
+        continue;
     }
 }
 
@@ -155,8 +296,12 @@ void initFS() {
   Serial.println("LittleFS erfolgreich geladen");
 }
 
+#ifdef HELTEC_WIFI_S3
+    #define ADC_CTL 37
+#elif SUPERMINI_C3
+    #define ADC_CTL 5
+#endif
 
-#define ADC_CTL 37
 #define ADC_IN  1
 #define U_IN_Teiler 390 / 100
 
@@ -190,7 +335,9 @@ void batt_meassure_init(void){
   pinMode(ADC_CTL, OUTPUT);
   digitalWrite(ADC_CTL, 0);
 }
+
 uint8_t batt_soc; 
+float battVolt;
 void batt_voltage_read(void){
   digitalWrite(ADC_CTL, 1);
   delay(1);
@@ -199,19 +346,38 @@ void batt_voltage_read(void){
     pin_mv += analogReadMilliVolts(ADC_IN);
   }
   uint32_t batt_mv = pin_mv * 0.49;
-  batt_soc = get_lipo_percent(batt_mv/1000.0);
+  battVolt = batt_mv / 1000.0;
+  batt_soc = get_lipo_percent(battVolt);
  // printf("V= %d mV SOC:%d\n", batt_mv, batt_soc);
   digitalWrite(ADC_CTL, 0);
 }
 
-// Heltec WiFi Kit V3: SSD1306 128x64 I2C
-// SDA = GPIO 4, SCL = GPIO 5
-U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(
-    U8G2_R0,     // Rotation
-    /* reset=*/ 21,
-    /* clock=*/ 18,
-    /* data=*/ 17
-);
+#ifdef HELTEC_WIFI_S3
+    // Heltec Display, Pins, etc.
+    // Heltec WiFi Kit V3: SSD1306 128x64 I2C
+    // SDA = GPIO 4, SCL = GPIO 5
+    U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(
+        U8G2_R0,     // Rotation
+        /* reset=*/ 21,
+        /* clock=*/ 18,
+        /* data=*/ 17
+    );
+#elif SUPERMINI_C3
+    // C3 SuperMini Pins
+    // Heltec Display, Pins, etc.
+    // Heltec WiFi Kit V3: SSD1306 128x64 I2C
+    // SDA = GPIO 4, SCL = GPIO 5
+    U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(
+        U8G2_R0,     // Rotation
+        /* reset=*/ -1,
+        /* clock=*/ 9,
+        /* data=*/ 10
+    );
+    #define     OLED_POWER_GND  7
+    #define     OLED_POWER_3V3  8
+#endif
+
+
 
 
 uint32_t lastDisplayValueTime = 0;
@@ -225,16 +391,15 @@ void display_init(void){
   // Textbreite berechnen, damit es zentriert ist
   int textWidth = u8g2.getStrWidth(buffer);
   int x = (128 - textWidth) / 2;
-  int y = 48;  // gute vertikale Position für 32px Font
+  int y = 52;  // gute vertikale Position für 32px Font
   u8g2.drawStr(x, y, buffer);
 
-  snprintf(buffer, sizeof(buffer), "Akku %d %%", batt_soc);
+  snprintf(buffer, sizeof(buffer), "SOC %d %% ", batt_soc);
   u8g2.setFont(u8g2_font_logisoso16_tr);
   textWidth = u8g2.getStrWidth(buffer);
   x = 128 - textWidth;
   y = 18; 
   u8g2.drawStr(x, y, buffer);
-
   u8g2.sendBuffer();
 }
 
@@ -249,10 +414,10 @@ void display_write_weigth(float weight){
   // Textbreite berechnen, damit es zentriert ist
   int textWidth = u8g2.getStrWidth(buffer);
   int x = (128 - textWidth) / 2;
-  int y = 48;  // gute vertikale Position für 32px Font
+  int y = 52;  // gute vertikale Position für 32px Font
   u8g2.drawStr(x, y, buffer);
 
-  snprintf(buffer, sizeof(buffer), "Akku %d &%", batt_soc);
+  snprintf(buffer, sizeof(buffer), "SOC %d %% ", batt_soc);
   u8g2.setFont(u8g2_font_logisoso16_tr);
   textWidth = u8g2.getStrWidth(buffer);
   x = 128 - textWidth;
@@ -262,11 +427,42 @@ void display_write_weigth(float weight){
   u8g2.sendBuffer();
 }
 
+void WiFiEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
+    switch (event) {
+        case ARDUINO_EVENT_WIFI_AP_STACONNECTED:
+            WifiClientConnected = true;
+            Serial.printf("Client connected: MAC %02X:%02X:%02X:%02X:%02X:%02X, AID=%d\n",
+                info.wifi_ap_staconnected.mac[0], info.wifi_ap_staconnected.mac[1],
+                info.wifi_ap_staconnected.mac[2], info.wifi_ap_staconnected.mac[3],
+                info.wifi_ap_staconnected.mac[4], info.wifi_ap_staconnected.mac[5],
+                info.wifi_ap_staconnected.aid
+            );
+            break;
 
+        case ARDUINO_EVENT_WIFI_AP_STADISCONNECTED:
+            WifiClientConnected = false;
+            Serial.printf("Client disconnected: MAC %02X:%02X:%02X:%02X:%02X:%02X, AID=%d\n",
+                info.wifi_ap_stadisconnected.mac[0], info.wifi_ap_stadisconnected.mac[1],
+                info.wifi_ap_stadisconnected.mac[2], info.wifi_ap_stadisconnected.mac[3],
+                info.wifi_ap_stadisconnected.mac[4], info.wifi_ap_stadisconnected.mac[5],
+                info.wifi_ap_stadisconnected.aid
+            );
+            break;
+    }
+}
 
 void setup() {
   Serial.begin(115200);
   initFS(); // Wichtig: Zuerst das Dateisystem starten
+
+#ifdef OLED_POWER_GND
+    pinMode(OLED_POWER_GND, OUTPUT);
+    digitalWrite(OLED_POWER_GND, 0);
+#endif
+#ifdef OLED_POWER_3V3
+    pinMode(OLED_POWER_3V3, OUTPUT);
+    digitalWrite(OLED_POWER_3V3, 1);
+#endif
 
   // WiFi Access Point
   batt_meassure_init();
@@ -275,10 +471,12 @@ void setup() {
 
   //esp_wifi_set_max_tx_power(40);
   //WiFi.setSleep(true);
-
+  
+  WiFi.onEvent(WiFiEvent);
   WiFi.mode(WIFI_AP);
   WiFi.softAP(ssid, password, 10);
-
+  delay(100);
+  
   Serial.println(WiFi.softAPIP());
 
   ws.onEvent(onEvent);
@@ -303,6 +501,7 @@ void setup() {
 
   xTaskCreate(scaleTask, "ScaleTask", 4096, NULL, 1, NULL);
   
+  init_bt_ad();
 }
 
 
@@ -314,6 +513,9 @@ void loop() {
   now = millis();
   if(now > nextEvent){
     batt_voltage_read();
+    if(wsConnected){
+        ws.textAll("B:"+String(battVolt, 2) + String(batt_soc, 10) + "%");
+    }
     nextEvent = now + 1000;
     if((now - lastDisplayValueTime) > 1000){
       display_init();
@@ -326,9 +528,10 @@ void loop() {
       scaleValue = weightFromQueue;
       if(fabs(scaleValue)< 0.08) scaleValue = 0;
       display_write_weigth(scaleValue);
+      bt_set_ad(scaleValue);
       if((scaleRunning) && (wsConnected)){
           Serial.printf("SV: %.2f %08d\r\n", scaleValue, millis());
-          ws.textAll(String(scaleValue, 2));
+          ws.textAll("W:"+String(scaleValue, 2));
       }
   }
 

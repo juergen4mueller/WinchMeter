@@ -1,0 +1,37 @@
+socket.onmessage = function(event) {
+    const msg = event.data;
+
+    // Gewicht
+    if (msg.startsWith("W:")) {
+        const weight = parseFloat(msg.substring(2));
+        const now = new Date();
+        const timestamp = now.toLocaleTimeString();
+
+        history.push({ time: now.toISOString(), val: weight });
+
+        chart.data.labels.push(timestamp);
+        chart.data.datasets[0].data.push(weight);
+
+        if (chart.data.labels.length > 200) {
+            chart.data.labels.shift();
+            chart.data.datasets[0].data.shift();
+        }
+
+        chart.update('none');
+        document.getElementById('weightDisplay').textContent =
+            weight.toFixed(2) + " kg";
+    }
+
+    // Akku
+    if (msg.startsWith("B:")) {
+        const voltage = parseFloat(msg.substring(2));
+
+        // Prozent berechnen (Beispiel Li-Ion 3.0–4.2V)
+        const percent = Math.round(
+            ((voltage - 3.0) / (4.2 - 3.0)) * 100
+        );
+
+        document.getElementById("akkustand").textContent =
+            voltage.toFixed(2) + "V " + percent + "%";
+    }
+};
