@@ -26,26 +26,26 @@ class CmdCallback : public NimBLECharacteristicCallbacks {
         uint8_t cmd = val[0];
         Serial.printf("Received command: 0x%02X\n", cmd);
 
-        switch (cmd) {
-            case 0x02:
-                Serial.println("TARE command received");
-                // TODO: tare logic
-                break;
+    //     switch (cmd) {
+    //         case 0x02:
+    //             Serial.println("TARE command received");
+    //             // TODO: tare logic
+    //             break;
 
-            case 0x03:
-                Serial.println("UNIT CHANGE command received");
-                // TODO: unit change logic
-                break;
+    //         case 0x03:
+    //             Serial.println("UNIT CHANGE command received");
+    //             // TODO: unit change logic
+    //             break;
 
-            case 0x04:
-                Serial.println("HOLD command received");
-                // TODO: hold logic
-                break;
+    //         case 0x04:
+    //             Serial.println("HOLD command received");
+    //             // TODO: hold logic
+    //             break;
 
-            default:
-                Serial.printf("Unknown command: 0x%02X\n", cmd);
-        }
-    }
+    //         default:
+    //             Serial.printf("Unknown command: 0x%02X\n", cmd);
+    //     }
+     }
 };
 
 // A3B8C4F4-1298-D5A4-5191-0A0D7DEA7C0A: IF_B7
@@ -184,7 +184,14 @@ int i;
 bool scaleRunning = false;
 bool wsConnected;
 
-
+void calibrateScale(float calWeight){
+    if(scaleValue > 0){
+        float scaleFactor = scaleValue/calWeight;
+        calibValue *= scaleFactor;
+        saveCalibration(calibValue);
+        scaleCalibrate = 1;
+    }
+}
     
 
 // WebSocket Event Handler
@@ -236,13 +243,7 @@ void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType 
                     Serial.print("Scale Value:");
                     Serial.print(scaleValue);
                }
-                
-                if(scaleValue > 0){
-                    float scaleFactor = scaleValue/calWeight;
-                    calibValue *= scaleFactor;
-                    saveCalibration(calibValue);
-                    scaleCalibrate = 1;
-                }
+               calibrateScale(calWeight);
             }
         }
     }
@@ -501,13 +502,31 @@ void setup() {
   
   init_bt_ad();
   delay(100);
+
+  esp_sleep_enable_ext1_wakeup(
+        (1ULL << GPIO_NUM_6) ,
+        ESP_EXT1_WAKEUP_ANY_LOW
+    );
+
+
 }
 
 
 
 uint8_t lastShown = 0;
-uint32_t now = 0, nextEvent = 0;
+uint32_t now = 0, nextEvent = 0, buttonLoop = 0;
+#define BUTTON_PIN 0
 
+unsigned long lastChange = 0;
+unsigned long pressStart = 0;
+int clickCount = 0;
+bool buttonState = false;
+bool lastButtonState = false;
+
+const unsigned long debounceTime = 30;
+const unsigned long clickTimeout = 300;
+const unsigned long longPressTime = 600;
+const unsigned long veryLongPressTime = 2000;
 
 
 void loop() {
@@ -523,6 +542,54 @@ void loop() {
     nextEvent = now + 1000;
     if((now - lastDisplayValueTime) > 1000){
       display_init();
+    }
+  }
+
+  if(now >= buttonLoop){
+    buttonLoop = now + debounceTime;
+    bool reading = !digitalRead(BTN_CTRL);
+    
+    if (reading != buttonState) {
+        buttonState = reading;
+        lastChange = now;
+        if (buttonState) {
+            // Button pressed
+            pressStart = now;
+        } 
+        else {
+            // Button released
+            unsigned long pressDuration = now - pressStart;
+            if (pressDuration > veryLongPressTime) {
+                Serial.println("Very Long Press");
+                Serial.println("Prepare for Sleep");
+                u8g2.clear();
+                delay(200);
+                esp_deep_sleep_start();
+            } else if (pressDuration > longPressTime) {
+                Serial.println("Long Press");
+            } else {
+                clickCount++;
+            }
+        }
+    }
+
+    // Click-Auswertung nach Timeout
+    if (!buttonState && clickCount > 0 && (now - lastChange) > clickTimeout) {
+
+        if (clickCount == 1) {
+            Serial.println("Single Click"); // Tara Waage
+            scaleTare = true;
+        } else if (clickCount == 2) {
+            Serial.println("Double Click"); // Kalibrieren mit 10kg
+           // calibrateScale(10.0);
+        } else if (clickCount == 3) {
+            Serial.println("Triple Click");
+        } else {
+            Serial.printf("%d Clicks\n", clickCount);
+        }
+
+        // WICHTIG: Immer zurücksetzen!
+        clickCount = 0;
     }
   }
 
