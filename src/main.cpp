@@ -12,6 +12,51 @@
 
 #define DEBUG 0
 
+
+#ifdef HELTEC_WIFI_S3
+    #define XH711_3V3 34
+    #define ADC_CTL 37
+    // Heltec Display, Pins, etc.
+    // Heltec WiFi Kit V3: SSD1306 128x64 I2C
+    // SDA = GPIO 4, SCL = GPIO 5
+    U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(
+        U8G2_R0,     // Rotation
+        /* reset=*/ 21,
+        /* clock=*/ 18,
+        /* data=*/ 17
+    );
+#elif SUPERMINI_C3
+    #define ADC_CTL 5
+    // C3 SuperMini Pins
+    // Heltec Display, Pins, etc.
+    // Heltec WiFi Kit V3: SSD1306 128x64 I2C
+    // SDA = GPIO 4, SCL = GPIO 5
+    U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(
+        U8G2_R0,     // Rotation
+        /* reset=*/ -1,
+        /* clock=*/ 9,
+        /* data=*/ 10
+    );
+    #define     OLED_POWER_GND  7
+    #define     OLED_POWER_3V3  8
+#elif SUPERMINI_S3
+    #define XH711_3V3 4
+    #define ADC_CTL 5
+    // C3 SuperMini Pins
+    // Heltec Display, Pins, etc.
+    // Heltec WiFi Kit V3: SSD1306 128x64 I2C
+    // SDA = GPIO 4, SCL = GPIO 5
+    U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(
+        U8G2_R0,     // Rotation
+        /* reset=*/ -1,
+        /* clock=*/ 10,
+        /* data=*/ 11
+    );
+    #define     OLED_POWER_GND  8
+    #define     OLED_POWER_3V3  9
+#endif
+
+
 bool WifiClientConnected = false;
 
 NimBLEAdvertising* pAdvertising;
@@ -145,6 +190,7 @@ float calibValue = 1;
 float scaleValue = 1;
 bool scaleCalibrate=0;
 bool scaleTare = 0;
+bool scalePowerDown=0;
 
 #define WEIGHT_FILTER_SIZE  12
 int weightMeassures = 0;
@@ -269,6 +315,10 @@ void scaleTask(void *pvParameters) {
                 scaleTare = 0;
                 scale.tare();
             }
+            if(scalePowerDown){
+                scale.power_down();
+                return;
+            }
             currentWeight = scale.get_units(16);
             // Gewicht in die Queue schreiben (nicht blockierend)
             xQueueOverwrite(weightQueue, &currentWeight);
@@ -290,11 +340,6 @@ void initFS() {
   Serial.println("LittleFS erfolgreich geladen");
 }
 
-#ifdef HELTEC_WIFI_S3
-    #define ADC_CTL 37
-#elif SUPERMINI_C3
-    #define ADC_CTL 5
-#endif
 
 #define ADC_IN  1
 #define U_IN_Teiler 390 / 100
@@ -346,35 +391,6 @@ void batt_voltage_read(void){
   digitalWrite(ADC_CTL, 0);
 }
 
-#ifdef HELTEC_WIFI_S3
-    // Heltec Display, Pins, etc.
-    // Heltec WiFi Kit V3: SSD1306 128x64 I2C
-    // SDA = GPIO 4, SCL = GPIO 5
-    U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(
-        U8G2_R0,     // Rotation
-        /* reset=*/ 21,
-        /* clock=*/ 18,
-        /* data=*/ 17
-    );
-#elif SUPERMINI_C3
-    // C3 SuperMini Pins
-    // Heltec Display, Pins, etc.
-    // Heltec WiFi Kit V3: SSD1306 128x64 I2C
-    // SDA = GPIO 4, SCL = GPIO 5
-    U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(
-        U8G2_R0,     // Rotation
-        /* reset=*/ -1,
-        /* clock=*/ 9,
-        /* data=*/ 10
-    );
-    #define     OLED_POWER_GND  7
-    #define     OLED_POWER_3V3  8
-#endif
-
-
-
-
-uint32_t lastDisplayValueTime = 0;
 void display_init(void){
   char buffer[16];
   snprintf(buffer, sizeof(buffer), "-.-kg");
@@ -397,28 +413,31 @@ void display_init(void){
   u8g2.sendBuffer();
 }
 
+bool menuActive = false;
 void display_write_weigth(float weight){
-  lastDisplayValueTime = millis();
-  char buffer[16];
+    if(menuActive == true){
+        return;
+    }
+    char buffer[16];
 
-  u8g2.clearBuffer();
-  snprintf(buffer, sizeof(buffer), "%.2f", weight);
-  u8g2.setFont(u8g2_font_logisoso28_tr);
+    u8g2.clearBuffer();
+    snprintf(buffer, sizeof(buffer), "%.2f", weight);
+    u8g2.setFont(u8g2_font_logisoso28_tr);
 
-  // Textbreite berechnen, damit es zentriert ist
-  int textWidth = u8g2.getStrWidth(buffer);
-  int x = (128 - textWidth) / 2;
-  int y = 52;  // gute vertikale Position für 32px Font
-  u8g2.drawStr(x, y, buffer);
+    // Textbreite berechnen, damit es zentriert ist
+    int textWidth = u8g2.getStrWidth(buffer);
+    int x = (128 - textWidth) / 2;
+    int y = 52;  // gute vertikale Position für 32px Font
+    u8g2.drawStr(x, y, buffer);
 
-  snprintf(buffer, sizeof(buffer), "SOC %d %% ", batt_soc);
-  u8g2.setFont(u8g2_font_logisoso16_tr);
-  textWidth = u8g2.getStrWidth(buffer);
-  x = 128 - textWidth;
-  y = 18; 
-  u8g2.drawStr(x, y, buffer);
+    snprintf(buffer, sizeof(buffer), "SOC %d %% ", batt_soc);
+    u8g2.setFont(u8g2_font_logisoso16_tr);
+    textWidth = u8g2.getStrWidth(buffer);
+    x = 128 - textWidth;
+    y = 18; 
+    u8g2.drawStr(x, y, buffer);
 
-  u8g2.sendBuffer();
+    u8g2.sendBuffer();
 }
 
 void WiFiEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
@@ -448,6 +467,36 @@ void WiFiEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
 #define BTN_CTRL 6 // Button mit PullUp, unterscheidung zwischen Click, Dobbelclick, Longclick oder Menü
                     // Einschalten, Ausschalten, Tara, Kalibrierung
 
+
+uint8_t lastShown = 0;
+uint32_t now = 0, nextEvent = 0, buttonLoop = 0;
+
+unsigned long lastChange = 0;
+unsigned long pressStart = 0;
+unsigned long scaleOffTime = 0;
+int clickCount = 0;
+bool buttonState = false;
+bool lastButtonState = false;
+
+const unsigned long debounceTime = 30;
+const unsigned long clickTimeout = 300;
+const unsigned long longPressTime = 600;
+const unsigned long veryLongPressTime = 2000;
+
+const unsigned long autoscaleOffTimeout = 300000; // 5 Minuten, wird bei Scale > 5kg zurückgesetzt
+const unsigned long wifiOffTimeout = 120000; // 2 Minuten, wird bei aktiver WLAN Verbindung + Websocket zurückgesetzt
+unsigned long wifiOffTime = 120000;
+
+void switch_off(void){
+    Serial.println("Prepare for Sleep");
+#ifdef XH711_3V3
+    digitalWrite(XH711_3V3, 0);
+#endif
+    u8g2.clear();
+    delay(200);
+    esp_deep_sleep_start();
+}
+
 void setup() {
   Serial.begin(115200);
   initFS(); // Wichtig: Zuerst das Dateisystem starten
@@ -460,6 +509,12 @@ void setup() {
     pinMode(OLED_POWER_3V3, OUTPUT);
     digitalWrite(OLED_POWER_3V3, 1);
 #endif
+#ifdef XH711_3V3
+    pinMode(XH711_3V3, OUTPUT);
+    digitalWrite(XH711_3V3, 1);
+#endif
+
+
 
     pinMode(BTN_CTRL, INPUT);
 
@@ -503,6 +558,8 @@ void setup() {
   init_bt_ad();
   delay(100);
 
+  scaleOffTime = millis()+autoscaleOffTimeout;
+
   esp_sleep_enable_ext1_wakeup(
         (1ULL << GPIO_NUM_6) ,
         ESP_EXT1_WAKEUP_ANY_LOW
@@ -512,36 +569,74 @@ void setup() {
 }
 
 
+#define BTN_ACT_SINGL_CLICK     1
+#define BTN_ACT_DBL_CLICK       2
+#define BTN_ACT_TRBL_CLICK      3
+#define BTN_ACT_LONGPRESS       4
 
-uint8_t lastShown = 0;
-uint32_t now = 0, nextEvent = 0, buttonLoop = 0;
-#define BUTTON_PIN 0
+// -------------------------------------------------------------
+// MENU
+// -------------------------------------------------------------
+const char* menuItems[] = {
+  "TARA",
+  "CAL 5kg",
+  "CAL 10kg",
+  "END"
+};
+const int MENU_COUNT = 4;
 
-unsigned long lastChange = 0;
-unsigned long pressStart = 0;
-int clickCount = 0;
-bool buttonState = false;
-bool lastButtonState = false;
+int menuIndex = 0;
+bool menuSelected = false;
 
-const unsigned long debounceTime = 30;
-const unsigned long clickTimeout = 300;
-const unsigned long longPressTime = 600;
-const unsigned long veryLongPressTime = 2000;
+// -------------------------------------------------------------
+// DISPLAY FUNKTION
+// -------------------------------------------------------------
+void drawMenu(void) {
+    u8g2.clearBuffer();
+    u8g2.setFont(u8g2_font_6x12_tf);
+
+    for (int i = 0; i < MENU_COUNT; i++) {
+        if (i == menuIndex) {
+        u8g2.drawBox(0, i * 14, 128, 14);
+        u8g2.setDrawColor(0);
+        u8g2.drawStr(4, i * 14 + 11, menuItems[i]);
+        u8g2.setDrawColor(1);
+        } else {
+        u8g2.drawStr(4, i * 14 + 11, menuItems[i]);
+        }
+    }
+
+    if (menuSelected) {
+        u8g2.setFont(u8g2_font_6x12_tf);
+        u8g2.drawStr(0, 63, "Ausgewaehlt!");
+    }
+
+    u8g2.sendBuffer();
+}
+
 
 
 void loop() {
   now = millis();
+  if(now > scaleOffTime){
+    switch_off();
+  }
+  if(wsConnected){
+    wifiOffTime = now + wifiOffTimeout;
+  }
+  if(now > wifiOffTime){
+    WiFi.softAPdisconnect(true); // AP aus 
+    WiFi.mode(WIFI_OFF); // optional: Funk komplett aus
+  }
+  
   if(now > nextEvent){
+    nextEvent = now + 1000;
     batt_voltage_read();
     if(wsConnected){
-        sprintf(textBuffer, "B:SOC:%d%", battVolt, batt_soc);
+        sprintf(textBuffer, "B:%.2fV SOC:%d", battVolt, batt_soc);
         Serial.print(textBuffer);
         Serial.println();
         ws.textAll(String(textBuffer));
-    }
-    nextEvent = now + 1000;
-    if((now - lastDisplayValueTime) > 1000){
-      display_init();
     }
   }
 
@@ -561,10 +656,7 @@ void loop() {
             unsigned long pressDuration = now - pressStart;
             if (pressDuration > veryLongPressTime) {
                 Serial.println("Very Long Press");
-                Serial.println("Prepare for Sleep");
-                u8g2.clear();
-                delay(200);
-                esp_deep_sleep_start();
+                switch_off();
             } else if (pressDuration > longPressTime) {
                 Serial.println("Long Press");
             } else {
@@ -577,13 +669,34 @@ void loop() {
     if (!buttonState && clickCount > 0 && (now - lastChange) > clickTimeout) {
 
         if (clickCount == 1) {
-            Serial.println("Single Click"); // Tara Waage
-            scaleTare = true;
+            Serial.println("Single Click"); // Mneü weiterblättern
+            if(menuActive){
+                menuIndex ++;
+                if(menuIndex >= MENU_COUNT){
+                    menuIndex = 0;
+                }
+            }
         } else if (clickCount == 2) {
-            Serial.println("Double Click"); // Kalibrieren mit 10kg
-           // calibrateScale(10.0);
+            Serial.println("Double Click"); // Menü bestätigen
+            if(menuActive){
+                 if(menuIndex == 0){
+                    scaleTare = true;
+                }
+                else if(menuIndex == 1){
+                    calibrateScale(5.0);
+                }
+                else if(menuIndex == 2){
+                    calibrateScale(10.0);
+                }
+
+                menuActive = false;
+            }
         } else if (clickCount == 3) {
-            Serial.println("Triple Click");
+            Serial.println("Triple Click"); // Menü starten
+            if(menuActive == false){
+                menuActive = true;
+                menuIndex = 0;
+            }
         } else {
             Serial.printf("%d Clicks\n", clickCount);
         }
@@ -591,12 +704,18 @@ void loop() {
         // WICHTIG: Immer zurücksetzen!
         clickCount = 0;
     }
+    if(menuActive){
+        drawMenu();
+    }
   }
 
   // Prüfen, ob ein neuer Wert in der Queue liegt
   if (xQueueReceive(weightQueue, &weightFromQueue, 0) == pdTRUE) {
       // Wert per WebSocket senden
       scaleValue = weightFromQueue;
+      if(scaleValue > 2.0){
+        scaleOffTime = now + autoscaleOffTimeout;
+      }
       if(fabs(scaleValue)< 0.08) scaleValue = 0;
       display_write_weigth(scaleValue);
       bt_set_ad(scaleValue);

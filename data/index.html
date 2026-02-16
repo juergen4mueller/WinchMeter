@@ -82,8 +82,8 @@
         socket.onmessage = function(event) {
             msg = event.data;
             if (msg.startsWith("B:")) {
-                const voltage = parseFloat(msg.slice(2));
-                document.getElementById("akkustand").innerHTML = voltage;
+                const batState = msg.slice(2);
+                document.getElementById("akkustand").innerHTML = batState;
             }
             else if (msg.startsWith("W:")) {
                 const scaleValue = parseFloat(msg.slice(2));
