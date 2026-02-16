@@ -12,10 +12,13 @@
 
 #define DEBUG 0
 
-
 #ifdef HELTEC_WIFI_S3
+    #define BTN_CTRL 6 // Button mit PullUp, unterscheidung zwischen Click, Dobbelclick, Longclick oder Menü
     #define XH711_3V3 34
     #define ADC_CTL 37
+
+    #define LOADCELL_SCK_PIN 3
+    #define LOADCELL_DOUT_PIN 2
     // Heltec Display, Pins, etc.
     // Heltec WiFi Kit V3: SSD1306 128x64 I2C
     // SDA = GPIO 4, SCL = GPIO 5
@@ -25,8 +28,12 @@
         /* clock=*/ 18,
         /* data=*/ 17
     );
-#elif SUPERMINI_C3
+#endif
+#ifdef SUPERMINI_C3
+    #define BTN_CTRL 6 // Button mit PullUp, unterscheidung zwischen Click, Dobbelclick, Longclick oder Menü
     #define ADC_CTL 5
+    #define LOADCELL_SCK_PIN 3
+    #define LOADCELL_DOUT_PIN 2
     // C3 SuperMini Pins
     // Heltec Display, Pins, etc.
     // Heltec WiFi Kit V3: SSD1306 128x64 I2C
@@ -39,9 +46,14 @@
     );
     #define     OLED_POWER_GND  7
     #define     OLED_POWER_3V3  8
-#elif SUPERMINI_S3
-    #define XH711_3V3 4
-    #define ADC_CTL 5
+#endif
+#ifdef ESP32S3_SUPERMINI
+    #define BTN_CTRL 6 // Button mit PullUp, unterscheidung zwischen Click, Dobbelclick, Longclick oder Menü
+    #define XH711_3V3 5
+    #define LOADCELL_SCK_PIN 4
+    #define LOADCELL_DOUT_PIN 3
+    #define XH711_GND 2
+    #define ADC_CTL 7
     // C3 SuperMini Pins
     // Heltec Display, Pins, etc.
     // Heltec WiFi Kit V3: SSD1306 128x64 I2C
@@ -57,7 +69,63 @@
 #endif
 
 
+// 16x16 WLAN Icon
+static const unsigned char wifi_icon[] U8X8_PROGMEM = {
+0b00000000, 0b00000000,
+0b00000000, 0b00000000,
+0b00000000, 0b00000000,
+0b00000000, 0b00000000,
+0b00000000, 0b00000000,
+0b00000000, 0b00000000,
+0b00000000, 0b00000000,
+0b00000000, 0b00000000,
+0b11111111, 0b11111111,
+0b01111111, 0b11111110,
+0b00000000, 0b00000000,
+0b00011111, 0b11111000,
+0b00001111, 0b11110000,
+0b00000000, 0b00000000,
+0b00000011, 0b11000000,
+0b00000001, 0b10000000
+//   0x00,0x00,
+//   0x0E,0x70,
+//   0x1F,0xF8,
+//   0x38,0x1C,
+//   0x70,0x0E,
+//   0x60,0x06,
+//   0xC7,0xE3,
+//   0x8F,0xF1,
+//   0x1C,0x38,
+//   0x18,0x18,
+//   0x10,0x08,
+//   0x00,0x00,
+//   0x00,0x00,
+//   0x00,0x00,
+//   0x00,0x00,
+//   0x00,0x00
+};
+
+static const unsigned char wifi_icon_apple[] U8X8_PROGMEM = {
+  0x00,0x00,
+  0x07,0xE0,
+  0x1C,0x38,
+  0x30,0x0C,
+  0x63,0xC6,
+  0x47,0xE2,
+  0x0E,0x70,
+  0x0C,0x30,
+  0x18,0x18,
+  0x10,0x08,
+  0x00,0x00,
+  0x00,0x00,
+  0x00,0x00,
+  0x00,0x00
+};
+
+
+
 bool WifiClientConnected = false;
+bool WifiActive = false;
 
 NimBLEAdvertising* pAdvertising;
 static NimBLECharacteristic* notifyChar;
@@ -212,8 +280,6 @@ float loadCalibration() {
 }
 
 // HX711 Konfiguration
-const int LOADCELL_SCK_PIN = 3;
-const int LOADCELL_DOUT_PIN = 2;
 HX711 scale;
 float weightFromQueue;
 uint8_t counter;
@@ -231,11 +297,15 @@ bool scaleRunning = false;
 bool wsConnected;
 
 void calibrateScale(float calWeight){
+    Serial.printf("Old scale Factor: %.2f", calibValue);
     if(scaleValue > 0){
         float scaleFactor = scaleValue/calWeight;
         calibValue *= scaleFactor;
         saveCalibration(calibValue);
         scaleCalibrate = 1;
+    }
+    else{
+        Serial.println(" Scale Value <= 0");
     }
 }
     
@@ -314,10 +384,6 @@ void scaleTask(void *pvParameters) {
             if(scaleTare){
                 scaleTare = 0;
                 scale.tare();
-            }
-            if(scalePowerDown){
-                scale.power_down();
-                return;
             }
             currentWeight = scale.get_units(16);
             // Gewicht in die Queue schreiben (nicht blockierend)
@@ -437,6 +503,11 @@ void display_write_weigth(float weight){
     y = 18; 
     u8g2.drawStr(x, y, buffer);
 
+    if(WifiActive){
+        u8g2.drawXBMP(0, 0, 16, 16, wifi_icon);
+        //u8g2.drawXBMP(0, 0, 14, 14, wifi_icon_apple);
+        
+    }
     u8g2.sendBuffer();
 }
 
@@ -497,76 +568,6 @@ void switch_off(void){
     esp_deep_sleep_start();
 }
 
-void setup() {
-  Serial.begin(115200);
-  initFS(); // Wichtig: Zuerst das Dateisystem starten
-
-#ifdef OLED_POWER_GND
-    pinMode(OLED_POWER_GND, OUTPUT);
-    digitalWrite(OLED_POWER_GND, 0);
-#endif
-#ifdef OLED_POWER_3V3
-    pinMode(OLED_POWER_3V3, OUTPUT);
-    digitalWrite(OLED_POWER_3V3, 1);
-#endif
-#ifdef XH711_3V3
-    pinMode(XH711_3V3, OUTPUT);
-    digitalWrite(XH711_3V3, 1);
-#endif
-
-
-
-    pinMode(BTN_CTRL, INPUT);
-
-  // WiFi Access Point
-  batt_meassure_init();
-  u8g2.begin();
-  display_init();
-
-  //esp_wifi_set_max_tx_power(40);
-  //WiFi.setSleep(true);
-  
-  WiFi.onEvent(WiFiEvent);
-  WiFi.mode(WIFI_AP);
-  WiFi.softAP(ssid, password, 10);
-  delay(100);
-  
-  Serial.println(WiFi.softAPIP());
-
-  ws.onEvent(onEvent);
-  server.addHandler(&ws);
-
-  // STATISCHE DATEIEN SERVIEREN
-  // Das ersetzt die manuellen Routen. Der ESP sucht die Datei im /data Ordner
-  server.serveStatic("/", LittleFS, "/").setDefaultFile("index.html");
-
-  server.begin();
-
-  // Waage initialisieren// Queue erstellen (Platz für 1 Float-Wert)
-  weightQueue = xQueueCreate(1, sizeof(float));
-  // Task starten
-  // Name, Stack-Größe, Priorität, Handle, Kern (beim C3 immer 0)
-
-  calibValue = loadCalibration();
-  Serial.print("Kalibrierwert geladen: ");
-  Serial.println(calibValue);
-
-  scale.set_scale(calibValue);
-
-  xTaskCreate(scaleTask, "ScaleTask", 4096, NULL, 1, NULL);
-  
-  init_bt_ad();
-  delay(100);
-
-  scaleOffTime = millis()+autoscaleOffTimeout;
-
-  esp_sleep_enable_ext1_wakeup(
-        (1ULL << GPIO_NUM_6) ,
-        ESP_EXT1_WAKEUP_ANY_LOW
-    );
-
-
-}
 
 
 #define BTN_ACT_SINGL_CLICK     1
@@ -579,8 +580,8 @@ void setup() {
 // -------------------------------------------------------------
 const char* menuItems[] = {
   "TARA",
-  "CAL 5kg",
   "CAL 10kg",
+  "WiFi on",
   "END"
 };
 const int MENU_COUNT = 4;
@@ -614,6 +615,83 @@ void drawMenu(void) {
     u8g2.sendBuffer();
 }
 
+void setup() {
+  Serial.begin(115200);
+  initFS(); // Wichtig: Zuerst das Dateisystem starten
+
+#ifdef OLED_POWER_GND
+    pinMode(OLED_POWER_GND, OUTPUT);
+    digitalWrite(OLED_POWER_GND, 0);
+#endif
+#ifdef OLED_POWER_3V3
+    pinMode(OLED_POWER_3V3, OUTPUT);
+    digitalWrite(OLED_POWER_3V3, 1);
+#endif
+#ifdef XH711_GND
+    pinMode(XH711_GND, OUTPUT);
+    digitalWrite(XH711_GND, 0);
+#endif
+#ifdef XH711_3V3
+    pinMode(XH711_3V3, OUTPUT);
+    digitalWrite(XH711_3V3, 1);
+#endif
+    pinMode(BTN_CTRL, INPUT);
+
+  // WiFi Access Point
+  batt_meassure_init();
+  u8g2.begin();
+  display_init();
+
+  //esp_wifi_set_max_tx_power(40);
+  //WiFi.setSleep(true);
+  
+  WiFi.onEvent(WiFiEvent);
+  WiFi.mode(WIFI_AP);
+  WiFi.softAP(ssid, password, 10);
+  delay(100);
+  WifiActive = true;
+  
+  Serial.println(WiFi.softAPIP());
+
+  ws.onEvent(onEvent);
+  server.addHandler(&ws);
+
+  // STATISCHE DATEIEN SERVIEREN
+  // Das ersetzt die manuellen Routen. Der ESP sucht die Datei im /data Ordner
+  server.serveStatic("/", LittleFS, "/").setDefaultFile("index.html");
+
+  server.begin();
+
+  // Waage initialisieren// Queue erstellen (Platz für 1 Float-Wert)
+  weightQueue = xQueueCreate(1, sizeof(float));
+  // Task starten
+  // Name, Stack-Größe, Priorität, Handle, Kern (beim C3 immer 0)
+
+  calibValue = loadCalibration();
+  if(calibValue == 0) calibValue = 2000;
+  if(calibValue >10000) calibValue = 2000;
+  Serial.print("Kalibrierwert geladen: ");
+  Serial.println(calibValue);
+
+  scale.set_scale(calibValue);
+
+  xTaskCreate(scaleTask, "ScaleTask", 4096, NULL, 1, NULL);
+  
+  init_bt_ad();
+  delay(100);
+
+  scaleOffTime = millis()+autoscaleOffTimeout;
+
+  esp_sleep_enable_ext1_wakeup(
+        (1ULL << GPIO_NUM_6) ,
+        ESP_EXT1_WAKEUP_ANY_LOW
+    );
+    delay(100);
+    scaleTare = true;
+
+}
+
+
 
 
 void loop() {
@@ -627,6 +705,7 @@ void loop() {
   if(now > wifiOffTime){
     WiFi.softAPdisconnect(true); // AP aus 
     WiFi.mode(WIFI_OFF); // optional: Funk komplett aus
+    WifiActive = false;
   }
   
   if(now > nextEvent){
@@ -679,18 +758,23 @@ void loop() {
         } else if (clickCount == 2) {
             Serial.println("Double Click"); // Menü bestätigen
             if(menuActive){
-                 if(menuIndex == 0){
+                if(menuIndex == 0){
                     scaleTare = true;
                 }
                 else if(menuIndex == 1){
-                    calibrateScale(5.0);
-                }
-                else if(menuIndex == 2){
                     calibrateScale(10.0);
                 }
-
+                else if(menuIndex == 2){
+                    wifiOffTime = now + wifiOffTimeout;
+                    WiFi.onEvent(WiFiEvent);
+                    WiFi.mode(WIFI_AP);
+                    WiFi.softAP(ssid, password, 10);
+                    delay(10);
+                    WifiActive = true;
+                }
                 menuActive = false;
             }
+
         } else if (clickCount == 3) {
             Serial.println("Triple Click"); // Menü starten
             if(menuActive == false){
