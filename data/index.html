@@ -82,11 +82,11 @@
         socket.onmessage = function(event) {
             msg = event.data;
             if (msg.startsWith("B:")) {
-                const voltage = parseFloat(msg.substring(2));
+                const voltage = parseFloat(msg.slice(2));
                 document.getElementById("akkustand").innerHTML = voltage;
             }
             else if (msg.startsWith("W:")) {
-                const scaleValue = parseFloat(msg.substring(2));
+                const scaleValue = parseFloat(msg.slice(2));
                 const now = new Date();
                 const weight = parseFloat(scaleValue);
                 const timestamp = now.toLocaleTimeString();

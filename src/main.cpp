@@ -1,8 +1,6 @@
 #include <Arduino.h>
-
 #include <Wire.h>
 #include <U8g2lib.h>
-
 #include <WiFi.h>
 #include <esp_wifi.h>
 #include <AsyncTCP.h>
@@ -10,8 +8,9 @@
 #include "HX711.h"
 #include "LittleFS.h"
 #include <Preferences.h>
-
 #include <NimBLEDevice.h>
+
+#define DEBUG 0
 
 bool WifiClientConnected = false;
 
@@ -51,42 +50,24 @@ class CmdCallback : public NimBLECharacteristicCallbacks {
 
 // A3B8C4F4-1298-D5A4-5191-0A0D7DEA7C0A: IF_B7
 // <0100> 0203 112A C019 1124 4301 0253 01F4 A144 30
-
-void init_bt_ad(void){
-
+void init_bt_ad(void) {
     NimBLEDevice::init("IF_B7");
 
+    // Server wird benötigt, auch wenn du keine Services nutzt
     NimBLEServer* server = NimBLEDevice::createServer();
-    // NimBLEService* service = server->createService("0000ffe0-0000-1000-8000-00805f9b34fb");
-    
-    // notifyChar = service->createCharacteristic(
-    //     "0000ffe4-0000-1000-8000-00805f9b34fb",
-    //     NIMBLE_PROPERTY::NOTIFY
-    // );
 
-    // writeChar = service->createCharacteristic(
-    //     "0000ffe9-0000-1000-8000-00805f9b34fb",
-    //     NIMBLE_PROPERTY::WRITE
-    // );
-
-    // writeChar->setCallbacks(new CmdCallback());
-    //service->start();
-
-    // Advertising
+    // Advertising-Objekt nur EINMAL holen
     pAdvertising = NimBLEDevice::getAdvertising();
-    pAdvertising->setMinInterval(200);
-    pAdvertising->setMaxInterval(300);
+    pAdvertising->setMinInterval(50);
+    pAdvertising->setMaxInterval(100);
 
     NimBLEAdvertisementData advData;
     advData.setFlags(BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP);
-
     advData.setName("IF_B7");
     advData.addServiceUUID("A3B8C4F4-1298-D5A4-5191-0A0D7DEA7C0A");
 
+    // Start-Payload
     std::string payload;
-    uint16_t raw = 0;  // Rohwert
-
-    //<0100> 0203 112A C019 1124 4301 0253 01F4 A144 30
     payload.push_back(0x01);
     payload.push_back(0x00);
     payload.push_back(0x02);
@@ -99,58 +80,65 @@ void init_bt_ad(void){
     payload.push_back(0x24);
     payload.push_back(0x43);
     payload.push_back(0x01);
-    payload.push_back(0x02);
-    payload.push_back(0x53);
+    payload.push_back(0x00);
+    payload.push_back(0x00);
     payload.push_back(0x01);
     payload.push_back(0xF4);
     payload.push_back(0xA1);
     payload.push_back(0x44);
     payload.push_back(0x30);
+
     advData.setManufacturerData(payload);
 
     pAdvertising->setAdvertisementData(advData);
     pAdvertising->start();
 
-
-    Serial.println("WH-C06 compatible BLE scale started");
+    Serial.println("BLE Advertising started");
 }
 
-uint32_t nextBtAdd =0;
-void bt_set_ad(float scaleValue){
+uint32_t nextBtAdd = 0;
+
+void bt_set_ad(float scValue) {
     uint32_t now = millis();
-    if((now > nextBtAdd)&&(!WifiClientConnected)){
-        nextBtAdd = now + 250;
-        Serial.printf("BT ADD %.2f\r\n", scaleValue);
-        NimBLEAdvertisementData advData;
-        std::string payload;
+    if (now < nextBtAdd || WifiClientConnected) return;
 
-        uint16_t raw = scaleValue * 100;  // Rohwert
+    nextBtAdd = now + 100;
+    if(DEBUG >= 1){
+        Serial.printf("BT send %.2f\r\n", scValue);
+    }    
+    if(scValue < 0) scValue = 0;
+    uint16_t raw = scValue * 100;
 
-        payload.push_back(0x01);
-        payload.push_back(0x00);
-        payload.push_back(0x02);
-        payload.push_back(0x03);
-        payload.push_back(0x11);
-        payload.push_back(0x2A);
-        payload.push_back(0xC0);
-        payload.push_back(0x19);
-        payload.push_back(0x11);
-        payload.push_back(0x24);
-        payload.push_back(0x43);
-        payload.push_back(0x01);
-        payload.push_back((raw >>8)&0xFF);
-        payload.push_back(raw & 0xFF);
-        payload.push_back(0x01);
-        payload.push_back(0xF4);
-        payload.push_back(0xA1);
-        payload.push_back(0x44);
-        payload.push_back(0x30);
-        advData.setManufacturerData(payload);
+    NimBLEAdvertisementData advData;
 
-        // Werbung aktualisieren (kein Stop/Start nötig)
-        pAdvertising->setAdvertisementData(advData);
-    }
+    // Nur Manufacturer-Data aktualisieren!
+    std::string payload;
+    payload.push_back(0x01);
+    payload.push_back(0x00);
+    payload.push_back(0x02);
+    payload.push_back(0x03);
+    payload.push_back(0x11);
+    payload.push_back(0x2A);
+    payload.push_back(0xC0);
+    payload.push_back(0x19);
+    payload.push_back(0x11);
+    payload.push_back(0x24);
+    payload.push_back(0x43);
+    payload.push_back(0x01);
+    payload.push_back((raw >> 8) & 0xFF);
+    payload.push_back(raw & 0xFF);
+    payload.push_back(0x01);
+    payload.push_back(0xF4);
+    payload.push_back(0xA1);
+    payload.push_back(0x44);
+    payload.push_back(0x30);
+
+    advData.setManufacturerData(payload);
+
+    // Advertising läuft bereits → nur Daten ersetzen
+    pAdvertising->setAdvertisementData(advData);
 }
+
 
 
 float calibValue = 1;
@@ -214,7 +202,9 @@ void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType 
         // Hier war der Fehler: Der Vergleich muss auf den Opcode im Frame schauen
         if (info->final && info->index == 0 && info->len == len && info->opcode == 0x01) { // 0x01 ist Text
             data[len] = 0;
-            Serial.printf("WS len: %d Data: %s", len, data);
+            if(DEBUG){
+                Serial.printf("WS len: %d Data: %s", len, data);
+            }
             if (strncmp((char*)data, "tare", len) == 0) {
                // scale.tare();
                 Serial.println("Tara ausgeführt");
@@ -240,10 +230,13 @@ void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType 
                 String calString = String(textBuffer);
                 float calWeight = calString.toFloat();
                // scale.tare();
-                Serial.print("Calibration Value: ");
-                Serial.print(calWeight);
-                Serial.print("Scale Value:");
-                Serial.print(scaleValue);
+               if(DEBUG){
+                    Serial.print("Calibration Value: ");
+                    Serial.print(calWeight);
+                    Serial.print("Scale Value:");
+                    Serial.print(scaleValue);
+               }
+                
                 if(scaleValue > 0){
                     float scaleFactor = scaleValue/calWeight;
                     calibValue *= scaleFactor;
@@ -451,6 +444,9 @@ void WiFiEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
     }
 }
 
+#define BTN_CTRL 6 // Button mit PullUp, unterscheidung zwischen Click, Dobbelclick, Longclick oder Menü
+                    // Einschalten, Ausschalten, Tara, Kalibrierung
+
 void setup() {
   Serial.begin(115200);
   initFS(); // Wichtig: Zuerst das Dateisystem starten
@@ -463,6 +459,8 @@ void setup() {
     pinMode(OLED_POWER_3V3, OUTPUT);
     digitalWrite(OLED_POWER_3V3, 1);
 #endif
+
+    pinMode(BTN_CTRL, INPUT);
 
   // WiFi Access Point
   batt_meassure_init();
@@ -502,6 +500,7 @@ void setup() {
   xTaskCreate(scaleTask, "ScaleTask", 4096, NULL, 1, NULL);
   
   init_bt_ad();
+  delay(100);
 }
 
 
@@ -509,12 +508,17 @@ void setup() {
 uint8_t lastShown = 0;
 uint32_t now = 0, nextEvent = 0;
 
+
+
 void loop() {
   now = millis();
   if(now > nextEvent){
     batt_voltage_read();
     if(wsConnected){
-        ws.textAll("B:"+String(battVolt, 2) + String(batt_soc, 10) + "%");
+        sprintf(textBuffer, "B:SOC:%d%", battVolt, batt_soc);
+        Serial.print(textBuffer);
+        Serial.println();
+        ws.textAll(String(textBuffer));
     }
     nextEvent = now + 1000;
     if((now - lastDisplayValueTime) > 1000){
