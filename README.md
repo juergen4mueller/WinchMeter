@@ -6,11 +6,12 @@
 - Anzeige über Website auf dem ESP32
   - Hotspot SSID "Waage", Passwort "123456789"
   - IP der Website: "192.168.4.1"
-![Beschreibung](doce/HX711.png)
 ### Komponenten:
 - Messelement der Waage
 - Heltec WiFi Kit 32 (V3)
-- HX711 ADC-Board (modifiziert für 80 Messungen / Sekunde)
+  ![Beschreibung](docs/HeltecWifi32.png)
+- HX711 ADC-Board (modifiziert für 80 Messungen / Sekunde)    
+![Beschreibung](docs/HX711.png)
 - Taster
 - LiPo-Zelle 1200 mAh
 - Gehäuse aus dem 3D-Drucker (Daten hier unter Housing)
