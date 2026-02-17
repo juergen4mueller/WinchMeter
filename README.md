@@ -6,7 +6,7 @@
 - Anzeige über Website auf dem ESP32
   - Hotspot SSID "Waage", Passwort "123456789"
   - IP der Website: "192.168.4.1"
-
+![Beschreibung](doce/HX711.png)
 ### Komponenten:
 - Messelement der Waage
 - Heltec WiFi Kit 32 (V3)
