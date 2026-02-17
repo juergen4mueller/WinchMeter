@@ -8,7 +8,7 @@
   - IP der Website: "192.168.4.1"
 ### Komponenten:
 - Messelement der Waage
-- Heltec WiFi Kit 32 (V3)
+- Heltec WiFi Kit 32 (V3)  
   ![Beschreibung](docs/HeltecWifi32.png)
 - HX711 ADC-Board (modifiziert für 80 Messungen / Sekunde)    
 ![Beschreibung](docs/HX711.png)
