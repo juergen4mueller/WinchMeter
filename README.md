@@ -9,7 +9,7 @@
 
 ### Komponenten:
 - Messelement der Waage
-- Heltec ESP32S3 Wifi Modul
+- Heltec WiFi Kit 32 (V3)
 - HX711 ADC-Board (modifiziert für 80 Messungen / Sekunde)
 - Taster
 - LiPo-Zelle 1200 mAh
