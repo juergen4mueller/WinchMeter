@@ -7,67 +7,22 @@
 #include <ESPAsyncWebServer.h>
 #include "HX711.h"
 #include "LittleFS.h"
-#include <Preferences.h>
-#include <NimBLEDevice.h>
+
+
+#include "bt_control.h"
+#include "pref_control.h"
+#include "hw_def.h"
+#include "battery.h"
+
 
 #define DEBUG 0
 
-#ifdef HELTEC_WIFI_S3
-    #define BTN_CTRL 6 // Button mit PullUp, unterscheidung zwischen Click, Dobbelclick, Longclick oder Menü
-    #define XH711_3V3 34
-    #define ADC_CTL 37
-
-    #define LOADCELL_SCK_PIN 3
-    #define LOADCELL_DOUT_PIN 2
-    // Heltec Display, Pins, etc.
-    // Heltec WiFi Kit V3: SSD1306 128x64 I2C
-    // SDA = GPIO 4, SCL = GPIO 5
-    U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(
-        U8G2_R0,     // Rotation
-        /* reset=*/ 21,
-        /* clock=*/ 18,
-        /* data=*/ 17
-    );
-#endif
-#ifdef SUPERMINI_C3
-    #define BTN_CTRL 6 // Button mit PullUp, unterscheidung zwischen Click, Dobbelclick, Longclick oder Menü
-    #define ADC_CTL 5
-    #define LOADCELL_SCK_PIN 3
-    #define LOADCELL_DOUT_PIN 2
-    // C3 SuperMini Pins
-    // Heltec Display, Pins, etc.
-    // Heltec WiFi Kit V3: SSD1306 128x64 I2C
-    // SDA = GPIO 4, SCL = GPIO 5
-    U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(
-        U8G2_R0,     // Rotation
-        /* reset=*/ -1,
-        /* clock=*/ 9,
-        /* data=*/ 10
-    );
-    #define     OLED_POWER_GND  7
-    #define     OLED_POWER_3V3  8
-#endif
-#ifdef ESP32S3_SUPERMINI
-    #define BTN_CTRL 6 // Button mit PullUp, unterscheidung zwischen Click, Dobbelclick, Longclick oder Menü
-    #define XH711_3V3 5
-    #define LOADCELL_SCK_PIN 4
-    #define LOADCELL_DOUT_PIN 3
-    #define XH711_GND 2
-    #define ADC_CTL 7
-    // C3 SuperMini Pins
-    // Heltec Display, Pins, etc.
-    // Heltec WiFi Kit V3: SSD1306 128x64 I2C
-    // SDA = GPIO 4, SCL = GPIO 5
-    U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(
-        U8G2_R0,     // Rotation
-        /* reset=*/ -1,
-        /* clock=*/ 10,
-        /* data=*/ 11
-    );
-    #define     OLED_POWER_GND  8
-    #define     OLED_POWER_3V3  9
-#endif
-
+U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(
+    U8G2_R0,     // Rotation
+    /* reset=*/ OLED_RST,
+    /* clock=*/ OLED_CLK,
+    /* data=*/ OLED_DAT
+);
 
 // 16x16 WLAN Icon
 static const unsigned char wifi_icon[] U8X8_PROGMEM = {
@@ -87,22 +42,6 @@ static const unsigned char wifi_icon[] U8X8_PROGMEM = {
 0b00000000, 0b00000000,
 0b11000000, 0b00000011,
 0b11000000, 0b00000011
-//   0x00,0x00,
-//   0x0E,0x70,
-//   0x1F,0xF8,
-//   0x38,0x1C,
-//   0x70,0x0E,
-//   0x60,0x06,
-//   0xC7,0xE3,
-//   0x8F,0xF1,
-//   0x1C,0x38,
-//   0x18,0x18,
-//   0x10,0x08,
-//   0x00,0x00,
-//   0x00,0x00,
-//   0x00,0x00,
-//   0x00,0x00,
-//   0x00,0x00
 };
 
 static const unsigned char wifi_icon_apple[] U8X8_PROGMEM = {
@@ -128,133 +67,6 @@ static const unsigned char wifi_icon_apple[] U8X8_PROGMEM = {
 bool WifiClientConnected = false;
 bool WifiActive = false;
 
-NimBLEAdvertising* pAdvertising;
-static NimBLECharacteristic* notifyChar;
-static NimBLECharacteristic* writeChar;
-
-class CmdCallback : public NimBLECharacteristicCallbacks {
-    void onWrite(NimBLECharacteristic* c) {
-        std::string val = c->getValue();
-        if (val.empty()) return;
-
-        uint8_t cmd = val[0];
-        Serial.printf("Received command: 0x%02X\n", cmd);
-
-    //     switch (cmd) {
-    //         case 0x02:
-    //             Serial.println("TARE command received");
-    //             // TODO: tare logic
-    //             break;
-
-    //         case 0x03:
-    //             Serial.println("UNIT CHANGE command received");
-    //             // TODO: unit change logic
-    //             break;
-
-    //         case 0x04:
-    //             Serial.println("HOLD command received");
-    //             // TODO: hold logic
-    //             break;
-
-    //         default:
-    //             Serial.printf("Unknown command: 0x%02X\n", cmd);
-    //     }
-     }
-};
-
-// A3B8C4F4-1298-D5A4-5191-0A0D7DEA7C0A: IF_B7
-// <0100> 0203 112A C019 1124 4301 0253 01F4 A144 30
-void init_bt_ad(void) {
-    NimBLEDevice::init("IF_B7");
-
-    // Server wird benötigt, auch wenn du keine Services nutzt
-    NimBLEServer* server = NimBLEDevice::createServer();
-
-    // Advertising-Objekt nur EINMAL holen
-    pAdvertising = NimBLEDevice::getAdvertising();
-    pAdvertising->setMinInterval(50);
-    pAdvertising->setMaxInterval(100);
-
-    NimBLEAdvertisementData advData;
-    advData.setFlags(BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP);
-    advData.setName("IF_B7");
-    advData.addServiceUUID("A3B8C4F4-1298-D5A4-5191-0A0D7DEA7C0A");
-
-    // Start-Payload
-    std::string payload;
-    payload.push_back(0x01);
-    payload.push_back(0x00);
-    payload.push_back(0x02);
-    payload.push_back(0x03);
-    payload.push_back(0x11);
-    payload.push_back(0x2A);
-    payload.push_back(0xC0);
-    payload.push_back(0x19);
-    payload.push_back(0x11);
-    payload.push_back(0x24);
-    payload.push_back(0x43);
-    payload.push_back(0x01);
-    payload.push_back(0x00);
-    payload.push_back(0x00);
-    payload.push_back(0x01);
-    payload.push_back(0xF4);
-    payload.push_back(0xA1);
-    payload.push_back(0x44);
-    payload.push_back(0x30);
-
-    advData.setManufacturerData(payload);
-
-    pAdvertising->setAdvertisementData(advData);
-    pAdvertising->start();
-
-    Serial.println("BLE Advertising started");
-}
-
-uint32_t nextBtAdd = 0;
-
-void bt_set_ad(float scValue) {
-    uint32_t now = millis();
-    if (now < nextBtAdd || WifiClientConnected) return;
-
-    nextBtAdd = now + 100;
-    if(DEBUG >= 1){
-        Serial.printf("BT send %.2f\r\n", scValue);
-    }    
-    if(scValue < 0) scValue = 0;
-    uint16_t raw = scValue * 100;
-
-    NimBLEAdvertisementData advData;
-
-    // Nur Manufacturer-Data aktualisieren!
-    std::string payload;
-    payload.push_back(0x01);
-    payload.push_back(0x00);
-    payload.push_back(0x02);
-    payload.push_back(0x03);
-    payload.push_back(0x11);
-    payload.push_back(0x2A);
-    payload.push_back(0xC0);
-    payload.push_back(0x19);
-    payload.push_back(0x11);
-    payload.push_back(0x24);
-    payload.push_back(0x43);
-    payload.push_back(0x01);
-    payload.push_back((raw >> 8) & 0xFF);
-    payload.push_back(raw & 0xFF);
-    payload.push_back(0x01);
-    payload.push_back(0xF4);
-    payload.push_back(0xA1);
-    payload.push_back(0x44);
-    payload.push_back(0x30);
-
-    advData.setManufacturerData(payload);
-
-    // Advertising läuft bereits → nur Daten ersetzen
-    pAdvertising->setAdvertisementData(advData);
-}
-
-
-
 float calibValue = 1;
 float scaleValue = 1;
 bool scaleCalibrate=0;
@@ -262,23 +74,10 @@ bool scaleTare = 0;
 bool scalePowerDown=0;
 
 #define WEIGHT_FILTER_SIZE  12
+
+
 int weightMeassures = 0;
 float weightSumm = 0;
-
-Preferences prefs;
-
-void saveCalibration(float value) {
-    prefs.begin("waage", false);   // Namespace "waage"
-    prefs.putFloat("calib", value);
-    prefs.end();
-}
-
-float loadCalibration() {
-    prefs.begin("waage", true);    // read-only
-    float value = prefs.getFloat("calib", 2000.0f);  // 0.0 = Default
-    prefs.end();
-    return value;
-}
 
 // HX711 Konfiguration
 HX711 scale;
@@ -408,56 +207,6 @@ void initFS() {
 }
 
 
-#define ADC_IN  1
-#define U_IN_Teiler 390 / 100
-
-/*
-12 Bit entsprechen 1,1V
-LSB = 1,1V / 4096 = 0,26855 mV
-Spannungsteiler mit Faktor 4,9 -> LSB = 1,3159 mV
--> ADC Value * 1,3159 = Spannung in mV
--> ADC Value / 759 = Spannung in V
-*/
-int get_lipo_percent(float voltage) {
-  if (voltage >= 4.2) return 100;
-  if (voltage >= 4.05) return 90;
-  if (voltage >= 3.97) return 80;
-  if (voltage >= 3.91) return 70;
-  if (voltage >= 3.86) return 60;
-  if (voltage >= 3.81) return 50;
-  if (voltage >= 3.78) return 40;
-  if (voltage >= 3.76) return 30;
-  if (voltage >= 3.73) return 20;
-  if (voltage >= 3.67) return 10;
-  if (voltage <= 3.30) return 0;
-  return 0;
-}
-void batt_meassure_init(void){
-
-  analogReadResolution(12); // Werte von 0 bis 4095
-  analogSetAttenuation(ADC_0db); // max. 1,1V
-
-  pinMode(ADC_IN, INPUT);
-  pinMode(ADC_CTL, OUTPUT);
-  digitalWrite(ADC_CTL, 0);
-}
-
-uint8_t batt_soc; 
-float battVolt;
-void batt_voltage_read(void){
-  digitalWrite(ADC_CTL, 1);
-  delay(1);
-  uint32_t pin_mv = 0;
-  for(int i=0;i<10;i++){
-    pin_mv += analogReadMilliVolts(ADC_IN);
-  }
-  uint32_t batt_mv = pin_mv * 0.49;
-  battVolt = batt_mv / 1000.0;
-  batt_soc = get_lipo_percent(battVolt);
- // printf("V= %d mV SOC:%d\n", batt_mv, batt_soc);
-  digitalWrite(ADC_CTL, 0);
-}
-
 void display_init(void){
   char buffer[16];
   snprintf(buffer, sizeof(buffer), "-.-kg");
@@ -561,8 +310,8 @@ unsigned long wifiOffTime = 120000;
 
 void switch_off(void){
     Serial.println("Prepare for Sleep");
-#ifdef XH711_3V3
-    digitalWrite(XH711_3V3, 0);
+#ifdef LOADCELL_3V3
+    digitalWrite(LOADCELL_3V3, 0);
 #endif
     u8g2.clear();
     delay(200);
@@ -628,13 +377,13 @@ void setup() {
     pinMode(OLED_POWER_3V3, OUTPUT);
     digitalWrite(OLED_POWER_3V3, 1);
 #endif
-#ifdef XH711_GND
-    pinMode(XH711_GND, OUTPUT);
-    digitalWrite(XH711_GND, 0);
+#ifdef LOADCELL_GND
+    pinMode(LOADCELL_GND, OUTPUT);
+    digitalWrite(LOADCELL_GND, 0);
 #endif
-#ifdef XH711_3V3
-    pinMode(XH711_3V3, OUTPUT);
-    digitalWrite(XH711_3V3, 1);
+#ifdef LOADCELL_3V3
+    pinMode(LOADCELL_3V3, OUTPUT);
+    digitalWrite(LOADCELL_3V3, 1);
 #endif
     pinMode(BTN_CTRL, INPUT);
 
@@ -678,7 +427,7 @@ void setup() {
 
   xTaskCreate(scaleTask, "ScaleTask", 4096, NULL, 1, NULL);
   
-  init_bt_ad();
+  init_bluetooth();
   delay(100);
 
   scaleOffTime = millis()+autoscaleOffTimeout;
@@ -803,7 +552,7 @@ void loop() {
       }
       if(fabs(scaleValue)< 0.08) scaleValue = 0;
       display_write_weigth(scaleValue);
-      bt_set_ad(scaleValue);
+      bluetooth_update_scale_value(scaleValue);
       if((scaleRunning) && (wsConnected)){
           Serial.printf("SV: %.2f %08d\r\n", scaleValue, millis());
           ws.textAll("W:"+String(scaleValue, 2));
