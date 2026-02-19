@@ -1,5 +1,6 @@
 #pragma once
 
+#define DEBUG 1
 
 #ifdef HELTEC_WIFI_S3
     #define BTN_CTRL 6
@@ -36,3 +37,7 @@
     #define OLED_POWER_GND  8
     #define OLED_POWER_3V3  9
 #endif
+
+#define  wifiOffTimeout 120000UL // 2 Minuten, wird bei aktiver WLAN Verbindung + Websocket zurückgesetzt
+
+void hw_init(void);

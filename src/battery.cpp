@@ -1,5 +1,5 @@
 #include <Arduino.h>
-#include <hw_def.h>
+#include "hw_config.h"
 
 
 #define ADC_IN  1

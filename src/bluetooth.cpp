@@ -1,4 +1,4 @@
-#include "bt_control.h"
+#include "bluetooth.h"
 #include <NimBLEDevice.h>
 
 // A3B8C4F4-1298-D5A4-5191-0A0D7DEA7C0A: IF_B7

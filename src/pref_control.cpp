@@ -1,4 +1,4 @@
-
+#include "pref_control.h"
 #include <Preferences.h>
 
 Preferences prefs;
