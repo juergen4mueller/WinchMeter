@@ -12,3 +12,4 @@ extern AsyncWebSocket ws;
 void wifi_begin(void);
 void wifi_start(void);
 void wifi_end(void);
+void ws_send_string(char* msg);

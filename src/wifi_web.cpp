@@ -133,3 +133,8 @@ void wifi_end(void){
     WiFi.mode(WIFI_OFF); // optional: Funk komplett aus
     WifiActive = false;
 }
+void ws_send_string(char* msg){
+    if(wsConnected){
+        ws.textAll(String(msg));
+    }
+}

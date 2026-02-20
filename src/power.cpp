@@ -20,3 +20,7 @@ void switch_off(void){
     delay(200);
     esp_deep_sleep_start();
 }
+
+void power_off_time_reset(void){
+    scaleOffTime = millis()+ autoscaleOffTimeout;
+}

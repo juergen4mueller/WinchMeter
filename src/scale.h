@@ -16,3 +16,5 @@ void scaleTask(void *pvParameters);
 void calibrateScale(float calWeight);
 
 void scale_begin(void);
+
+bool scale_read(float *val);

@@ -73,14 +73,13 @@ void scale_begin(void){
   Serial.print("Kalibrierwert geladen: ");
   Serial.println(calibValue);
   scale.set_scale(calibValue);
-
-
   weightQueue = xQueueCreate(1, sizeof(float));
   xTaskCreate(scaleTask, "ScaleTask", 4096, NULL, 1, NULL);
 }
 
 bool scale_read(float *val){
     if (xQueueReceive(weightQueue, &weightFromQueue, 0) == pdTRUE) {
+        *val = weightFromQueue;
         return 1;
     }
     return 0;
