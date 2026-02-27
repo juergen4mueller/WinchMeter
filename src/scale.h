@@ -1,6 +1,7 @@
 #pragma once
 #include "queue.h"
 
+#define SCALE_MEASSURES_NUM 1
 
 extern float calibValue;
 extern float scaleValue;
@@ -8,8 +9,6 @@ extern bool scaleCalibrate;
 extern bool scaleTare;
 
 extern float weightFromQueue;
-
-extern bool scaleRunning;
 
 extern QueueHandle_t weightQueue;
 void scaleTask(void *pvParameters);

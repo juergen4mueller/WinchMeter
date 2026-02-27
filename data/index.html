@@ -11,18 +11,15 @@
         Chart.register(zoomPlugin);
     </script> -->
 
-
     <script src="nosleep.min.js"></script>
 </head>
 <body>
     <div class="container">
-
         <div class="buttonRow">
             <button onclick="calibrate()" class="btn-gray">Calibrate</button>
             <h2 id="akkustand">3,87V 50%</h2>
             <button onclick="tare()" class="btn-gray">Tara</button>
         </div>
-
         <h1>Winch Meter</h1>
         <div id="weightDisplay">0.00 kg</div>
         <canvas id="weightChart"></canvas>
@@ -31,6 +28,10 @@
             <button id="btnStopp" class="btn-blue">Stopp</button>
             <button onclick="exportCSV()" class="btn-gray">Export</button>
         </div>
+        <!-- <div class="buttonRow">
+            <h3 id="txtMaxWeigth">0.00</h3>
+            <button onclick="resetMaxWeight" class="btn-blue">reset MAX</button>
+        </div> -->
     </div>
     <script>
         let wakeLock = null;

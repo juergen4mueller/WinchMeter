@@ -18,7 +18,6 @@ HX711 scale;
 float weightFromQueue;
 uint8_t counter;
 
-bool scaleRunning = false;
 
 void calibrateScale(float calWeight){
     Serial.printf("Old scale Factor: %.2f", calibValue);
@@ -54,14 +53,14 @@ void scaleTask(void *pvParameters) {
                 scaleTare = 0;
                 scale.tare();
             }
-            currentWeight = scale.get_units(16);
+            currentWeight = scale.get_units(SCALE_MEASSURES_NUM);
             // Gewicht in die Queue schreiben (nicht blockierend)
             xQueueOverwrite(weightQueue, &currentWeight);
         } else {
             Serial.println("Waage nicht gefunden - Task wartet...");
         }
         // WICHTIG: Dem Watchdog Zeit geben!
-        vTaskDelay(pdMS_TO_TICKS(50)); 
+        vTaskDelay(pdMS_TO_TICKS(100)); 
         continue;
     }
 }
@@ -74,6 +73,7 @@ void scale_begin(void){
   Serial.println(calibValue);
   scale.set_scale(calibValue);
   weightQueue = xQueueCreate(1, sizeof(float));
+  //xTaskCreateStaticPinnedToCore(scaleTask, "ScaleTask", 4096, NULL, 1, NULL, NULL, 1);
   xTaskCreate(scaleTask, "ScaleTask", 4096, NULL, 1, NULL);
 }
 
@@ -84,4 +84,3 @@ bool scale_read(float *val){
     }
     return 0;
 }
-  

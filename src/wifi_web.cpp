@@ -12,9 +12,12 @@
 
 
 bool wsConnected = false;
+bool scaleRunning = false;
 
 bool WifiClientConnected = false;
 bool WifiActive = false;
+
+float maxScaleValue = 0;
 
 uint32_t wifiOffTime = 120000;
 
@@ -108,9 +111,11 @@ void WiFiEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
 }
 
 void wifi_begin(void){
+  //esp_wifi_set_max_tx_power(40);
+  //WiFi.setSleep(true);
   WiFi.onEvent(WiFiEvent);
   WiFi.mode(WIFI_AP);
-  WiFi.softAP(ssid, password, 10);
+  WiFi.softAP(ssid, password, 10, 0, 1, false);
   delay(100);
   WifiActive = true;
   
@@ -118,11 +123,9 @@ void wifi_begin(void){
 
   ws.onEvent(onEvent);
   server.addHandler(&ws);
-
   // STATISCHE DATEIEN SERVIEREN
   // Das ersetzt die manuellen Routen. Der ESP sucht die Datei im /data Ordner
   server.serveStatic("/", LittleFS, "/").setDefaultFile("index.html");
-
   server.begin();
 
 }
@@ -134,7 +137,7 @@ void wifi_end(void){
     WifiActive = false;
 }
 void ws_send_string(char* msg){
-    if(wsConnected){
+    if(wsConnected && scaleRunning && WifiClientConnected){
         ws.textAll(String(msg));
     }
 }

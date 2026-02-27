@@ -1,6 +1,7 @@
 #pragma once
 #include <ESPAsyncWebServer.h>
 
+#define WIFI_OFF_DELAY  120000UL
 
 extern bool wsConnected;
 extern bool WifiClientConnected;

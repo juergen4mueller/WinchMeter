@@ -1,7 +1,20 @@
 #include "hw_config.h"
 #include <Arduino.h>
+#include <LittleFS.h>
+
+
+// Initialisierung von LittleFS
+void initFS() {
+  if (!LittleFS.begin(true)) {
+    Serial.println("Fehler beim Mounten von LittleFS");
+    return;
+  }
+  Serial.println("LittleFS erfolgreich geladen");
+}
+
 
 void hw_init(void){
+    initFS();
     #ifdef OLED_POWER_GND
         pinMode(OLED_POWER_GND, OUTPUT);
         digitalWrite(OLED_POWER_GND, 0);

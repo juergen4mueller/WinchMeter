@@ -1,6 +1,7 @@
 #include "power.h"
 #include <Arduino.h>
 #include "display.h"
+#include "wifi_web.h"
 
 
 unsigned long scaleOffTime = 300000;
@@ -20,6 +21,22 @@ void switch_off(void){
     delay(200);
     esp_deep_sleep_start();
 }
+
+void power_manager(void){
+    uint32_t now = millis();
+    if(now > wifiOffTime){
+        wifi_end();
+    }
+    if(now > scaleOffTime){
+        switch_off();
+    }
+    if(WifiClientConnected){
+        wifiOffTime = now + WIFI_OFF_DELAY;
+    }
+    // alte Websockets eliminieren
+    ws.cleanupClients();
+}
+
 
 void power_off_time_reset(void){
     scaleOffTime = millis()+ autoscaleOffTimeout;

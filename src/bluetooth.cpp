@@ -1,5 +1,6 @@
 #include "bluetooth.h"
 #include <NimBLEDevice.h>
+#include <wifi_web.h>
 
 // A3B8C4F4-1298-D5A4-5191-0A0D7DEA7C0A: IF_B7
 // <0100> 0203 112A C019 1124 4301 0253 01F4 A144 30
@@ -16,26 +17,6 @@ class CmdCallback : public NimBLECharacteristicCallbacks {
 
         uint8_t cmd = val[0];
         Serial.printf("Received command: 0x%02X\n", cmd);
-
-    //     switch (cmd) {
-    //         case 0x02:
-    //             Serial.println("TARE command received");
-    //             // TODO: tare logic
-    //             break;
-
-    //         case 0x03:
-    //             Serial.println("UNIT CHANGE command received");
-    //             // TODO: unit change logic
-    //             break;
-
-    //         case 0x04:
-    //             Serial.println("HOLD command received");
-    //             // TODO: hold logic
-    //             break;
-
-    //         default:
-    //             Serial.printf("Unknown command: 0x%02X\n", cmd);
-    //     }
      }
 };
 
@@ -47,8 +28,9 @@ void init_bluetooth(void){
 
     // Advertising-Objekt nur EINMAL holen
     pAdvertising = NimBLEDevice::getAdvertising();
-    pAdvertising->setMinInterval(50);
-    pAdvertising->setMaxInterval(100);
+    pAdvertising->setMinInterval(160);
+    pAdvertising->setMaxInterval(200);
+
 
     NimBLEAdvertisementData advData;
     advData.setFlags(BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP);
@@ -86,13 +68,15 @@ void init_bluetooth(void){
 }
 
 
+
 uint32_t nextBtAdd = 0;
 void bluetooth_update_scale_value(float scValue) {
     uint32_t now = millis();
     //if ((now < nextBtAdd)|| WifiClientConnected) return;
-    if (now < nextBtAdd) return;
+    // if (now < nextBtAdd) return;
+    // if(wsConnected && WifiClientConnected) return;
 
-    nextBtAdd = now + 100;
+    // nextBtAdd = now + 150;
     //if(DEBUG >= 1){
         Serial.printf("BT send %.2f\r\n", scValue);
    // }    
