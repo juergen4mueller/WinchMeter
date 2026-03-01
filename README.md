@@ -1,5 +1,8 @@
 # Upgrade einer einfachen elektronische Kranwaage bis 300 kg.
-## Vorteile: Remote ablesen und speichern des Verlaufs
+
+[Data Viewer hier klicken](index.html)
+
+### Vorteile: Remote ablesen und speichern des Verlaufs
 ### Anzeigeoptionen:
 - Direkt auf dem Display der Waage
 - Anzeige der Daten über BLE mit App "Hold Scale"

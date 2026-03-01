@@ -46,6 +46,8 @@ void loop() {
     if(fabs(scaleValue) < 0.1)scaleValue = 0; // zappeln um 0 ausblenden
     Serial.printf("New scale value: %.2f\r\n", scaleValue);
     display_write_weigth(scaleValue);
+    // per Web nur positive Werte
+    if(scaleValue < 0) scaleValue = 0;
     sprintf(textBuffer, "W:%.2f", scaleValue);
     ws_send_string(textBuffer);
     bluetooth_update_scale_value(scaleValue);

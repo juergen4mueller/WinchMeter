@@ -17,17 +17,17 @@ Spannungsteiler mit Faktor 4,9 -> LSB = 1,3159 mV
 -> ADC Value / 759 = Spannung in V
 */
 int get_lipo_percent(float voltage) {
-  if (voltage >= 4.2) return 100;
-  if (voltage >= 4.05) return 90;
-  if (voltage >= 3.97) return 80;
-  if (voltage >= 3.91) return 70;
-  if (voltage >= 3.86) return 60;
-  if (voltage >= 3.81) return 50;
-  if (voltage >= 3.78) return 40;
-  if (voltage >= 3.76) return 30;
-  if (voltage >= 3.73) return 20;
-  if (voltage >= 3.67) return 10;
-  if (voltage <= 3.30) return 0;
+  if (voltage >= 4.10) return 100;
+  if (voltage >= 4.03) return 90;
+  if (voltage >= 3.95) return 80;
+  if (voltage >= 3.89) return 70;
+  if (voltage >= 3.84) return 60;
+  if (voltage >= 3.80) return 50;
+  if (voltage >= 3.77) return 40;
+  if (voltage >= 3.75) return 30;
+  if (voltage >= 3.72) return 20;
+  if (voltage >= 3.65) return 10;
+  if (voltage <= 3.40) return 0;
   return 0;
 }
 

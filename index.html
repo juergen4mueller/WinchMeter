@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Plot Display</title>
+
+    <!-- Plotly -->
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+
+    <!-- PapaParse für CSV -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+    <style>
+        body { font-family: sans-serif; margin: 40px; }
+        #plot { width: 100%; height: 500px; }
+    </style>
+</head>
+<body>
+
+<h2>Plot saved data</data></h2>
+
+<input type="file" id="csvFile" accept=".csv">
+<div id="plot"></div>
+
+<script>
+document.getElementById("csvFile").addEventListener("change", function(e) {
+    const file = e.target.files[0];
+
+    Papa.parse(file, {
+        header: true,
+        dynamicTyping: true,
+        complete: function(results) {
+            const data = results.data;
+
+            // Beispiel: Spaltennamen automatisch erkennen
+            const columns = Object.keys(data[0]);
+
+            // Beispiel: erste Spalte = x, zweite Spalte = y
+            const x = data.map(row => row[columns[0]]);
+            const y = data.map(row => row[columns[1]]);
+
+            const trace = {
+                x: x,
+                y: y,
+                mode: "lines+markers",
+                type: "scatter"
+            };
+
+            Plotly.newPlot("plot", [trace], {
+                title: "Plot aus CSV",
+                xaxis: { title: columns[0] },
+                yaxis: { title: columns[1] }
+            });
+        }
+    });
+});
+</script>
+
+</body>
+</html>
