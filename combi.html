@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Datenauswertung Schlepp mit VESC und Waage</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <style>
+        body { font-family: sans-serif; margin: 20px; background: #f4f4f9; }
+        .control-panel { display: flex; gap: 20px; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px; flex-wrap: wrap; }
+        .source-box { border-left: 4px solid #007bff; padding-left: 15px; }
+        .source-box.s2 { border-left-color: #ff7f0e; }
+        #plot { width: 100%; height: 70vh; background: white; border-radius: 8px; }
+        label { font-size: 0.8em; font-weight: bold; display: block; margin-top: 5px; }
+        input[type="number"] { width: 80px; }
+    </style>
+</head>
+<body>
+
+<h2>Datenauswertung Schlepp mit VESC und Waage</h2>
+
+<div class="control-panel">
+    <div class="source-box s1">
+        <strong>Datei 1 (VESC Log)</strong>
+        <input type="file" id="file1" accept=".csv">
+        <label>Start-Offset (X):</label>
+        <input type="number" id="off1" value="0" step="1">
+        <label>X-Auflösung (Scale):</label>
+        <input type="number" id="scale1" value="1" step="0.1">
+    </div>
+
+    <div class="source-box s2">
+        <strong>Datei 2 (WinchMeter Log)</strong>
+        <input type="file" id="file2" accept=".csv">
+        <label>Start-Offset (X):</label>
+        <input type="number" id="off2" value="0" step="1">
+        <label>X-Auflösung (Scale):</label>
+        <input type="number" id="scale2" value="1.223" step="0.1">
+        <label>Y-Auflösung (Scale):</label>
+        <input type="number" id="scale2y" value="1" step="0.1">
+    </div>
+    
+    <div style="align-self: flex-end;">
+        <button onclick="updatePlot()" style="padding: 10px 20px; cursor:pointer;">Plot aktualisieren</button>
+    </div>
+</div>
+
+<div id="plot"></div>
+
+<script>
+let dataStore = {
+    csv1: null,
+    csv2: null
+};
+
+// Listener für Datei 1
+document.getElementById('file1').addEventListener('change', function(e) {
+    Papa.parse(e.target.files[0], {
+        header: true, dynamicTyping: true, skipEmptyLines: true, delimiter: ";",
+        complete: function(results) {
+            dataStore.csv1 = results.data;
+            updatePlot();
+        }
+    });
+});
+
+// Listener für Datei 2
+document.getElementById('file2').addEventListener('change', function(e) {
+    Papa.parse(e.target.files[0], {
+        header: true, dynamicTyping: true, skipEmptyLines: true,
+        complete: function(results) {
+            dataStore.csv2 = results.data;
+            updatePlot();
+        }
+    });
+});
+
+function updatePlot() {
+    const traces = [];
+    
+    // Parameter aus UI holen
+    const off1 = parseFloat(document.getElementById('off1').value);
+    const scale1 = parseFloat(document.getElementById('scale1').value);
+    const off2 = parseFloat(document.getElementById('off2').value);
+    const scale2 = parseFloat(document.getElementById('scale2').value);
+    const scale2y = parseFloat(document.getElementById('scale2y').value);
+
+    // Verarbeitung CSV 1 (mit deinen Berechnungen)
+    if (dataStore.csv1) {
+        const columns = ["current_motor", "input_voltage", "current_in", "duty_high",
+            "speed_kmhX10", "fault_high", "temp_mos_max", "tachometer", "temp_motor"];
+        columns.forEach(col => {
+            traces.push({
+                x: dataStore.csv1.map((_, i) => off1 + (i * scale1)),
+                y: dataStore.csv1.map(r => {
+                    if(col === "speed_meters_per_sec") return r[col] * 3.6; // Beispiel Umrechnung
+                    if(col === "tachometer") return r[col] / 72.50; // Beispiel Umrechnung
+                    return r[col];
+                }),
+                name: col,
+                mode: 'lines'
+            });
+        });
+    }
+
+    // Verarbeitung CSV 2
+    if (dataStore.csv2) {
+        const cols = Object.keys(dataStore.csv2[0]);
+        // Wir nehmen hier einfach die zweite Spalte als Beispiel-Wert
+        traces.push({
+            x: dataStore.csv2.map((_, i) => off2 + (i * scale2)),
+            y: dataStore.csv2.map(r => r[cols[1]] * scale2y),
+            name: cols[1],
+            mode: 'lines',
+            // line: { dash: 'dot' }
+        });
+    }
+
+    const layout = {
+        title: 'Synchronisierte Daten-Analyse',
+        xaxis: { title: 'Zeit / Index (angepasst)' },
+        yaxis: { title: 'Messwerte' },
+        hovermode: 'closest'
+    };
+
+    Plotly.newPlot('plot', traces, layout);
+}
+</script>
+
+</body>
+</html>
