@@ -83,7 +83,6 @@ function updatePlot() {
     const scale1 = parseFloat(document.getElementById('scale1').value);
     const off2 = parseFloat(document.getElementById('off2').value);
     const scale2 = parseFloat(document.getElementById('scale2').value);
-    const scale2y = parseFloat(document.getElementById('scale2y').value);
 
     // Verarbeitung CSV 1 (mit deinen Berechnungen)
     if (dataStore.csv1) {
@@ -109,7 +108,7 @@ function updatePlot() {
         // Wir nehmen hier einfach die zweite Spalte als Beispiel-Wert
         traces.push({
             x: dataStore.csv2.map((_, i) => off2 + (i * scale2)),
-            y: dataStore.csv2.map(r => r[cols[1]] * scale2y),
+            y: dataStore.csv2.map(r => r[cols[1]]),
             name: cols[1],
             mode: 'lines',
             // line: { dash: 'dot' }
